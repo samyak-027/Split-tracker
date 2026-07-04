@@ -2,7 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
+import dotenv from "dotenv";
 
+
+dotenv.config();
 // Routes will be imported here
 import authRoutes from '../src/back/routes/authRoutes';
 import groupRoutes from '../src/back/routes/groupRoutes';
