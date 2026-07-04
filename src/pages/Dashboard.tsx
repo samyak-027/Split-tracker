@@ -30,7 +30,7 @@ export default function Dashboard() {
     );
   }
 
-  const { expenseTotal, incomeTotal, balance, recentActivity } = data || { expenseTotal: 0, incomeTotal: 0, balance: 0, recentActivity: [] };
+  const { expenseTotal = 0, incomeTotal = 0, balance = 0, recentActivity = [] } = data || {};
 
   return (
     <div className="space-y-8">
@@ -59,7 +59,7 @@ export default function Dashboard() {
           type="expense" 
         />
         <StatCard 
-          title="Owed To You" 
+          title="You Get" 
           amount={0} 
           icon={<HandCoins className="text-purple-500" />} 
           type="net" 
