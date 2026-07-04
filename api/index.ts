@@ -45,13 +45,23 @@ app.use(async (req, res, next) => {
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/groups', groupRoutes);
-app.use('/api/friends', friendRoutes);
-app.use('/api/income', incomeRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/shared-expenses', sharedExpenseRoutes);
-app.use('/api/settlements', settlementRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+const apiRouter = express.Router();
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/groups', groupRoutes);
+apiRouter.use('/friends', friendRoutes);
+apiRouter.use('/income', incomeRoutes);
+apiRouter.use('/expenses', expenseRoutes);
+apiRouter.use('/shared-expenses', sharedExpenseRoutes);
+apiRouter.use('/settlements', settlementRoutes);
+apiRouter.use('/dashboard', dashboardRoutes);
+
+// Mount on both /api and / in case Vercel strips the /api prefix
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
+
+// Catch-all 404 for API
+app.use((req, res) => {
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+});
 
 export default app;
