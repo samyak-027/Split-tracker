@@ -135,7 +135,7 @@ export default function Expenses() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-x-auto">
          {isLoading ? (
              <div className="p-8 text-center text-slate-500">Loading expenses...</div>
          ) : expenses.length === 0 ? (
@@ -152,7 +152,7 @@ export default function Expenses() {
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                     {expenses.map((exp: any) => (
+                     {[...expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((exp: any) => (
                          <tr key={exp._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                              <td className="px-6 py-4 whitespace-nowrap text-slate-500">{format(new Date(exp.date), 'MMM d, yyyy')}</td>
                              <td className="px-6 py-4 font-medium">{exp.description}</td>
