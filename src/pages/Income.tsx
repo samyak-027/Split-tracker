@@ -1,129 +1,526 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import toast from 'react-hot-toast';
-import { format } from 'date-fns';
-import { Trash2 } from 'lucide-react';
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import { useState } from "react";
+import toast from "react-hot-toast";
+import { format } from "date-fns";
+import { useAuthStore } from "../store/authStore";
+import { useForm } from "react-hook-form";
+import AddExpenseForm from "../components/AddExpenseForm";
+import {
+  HandCoins,
+  Plus,
+  Check,
+  ArrowRight,
+  Trash2,
+  Pencil,
+} from "lucide-react";
+import ConfirmModal from "../components/ConfirmModal";
 
-export default function Income() {
+export default function GroupDetail() {
+  const { id } = useParams();
+  const { user } = useAuthStore();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
+  const [showAddExpense, setShowAddExpense] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+  const [settlementToCreate, setSettlementToCreate] = useState<{ amount: number; paidTo: string; name: string } | null>(null);
+  const [editingExpense, setEditingExpense] = useState<any>(null);
   const { register, handleSubmit, reset } = useForm();
 
-  const { data: incomes = [], isLoading } = useQuery({
-    queryKey: ['income'],
+  const { data: groupData, isLoading: groupLoading } = useQuery({
+    queryKey: ["group", id],
     queryFn: async () => {
-      const res = await api.get('/income');
+      const res = await api.get(`/groups/${id}`);
       return res.data;
-    }
+    },
   });
 
-  const addMutation = useMutation({
-    mutationFn: (data: any) => api.post('/income', data),
+  const { data: balances = {}, isLoading: balanceLoading } = useQuery({
+    queryKey: ["groupBalances", id],
+    queryFn: async () => {
+      const res = await api.get(`/groups/${id}/balances`);
+      return res.data;
+    },
+  });
+
+  const addExpenseMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return api.post("/shared-expenses", {
+        ...data,
+        group: id,
+        date: new Date(),
+      });
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['income'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Income added');
-      setShowForm(false);
-      reset();
-    }
+      queryClient.invalidateQueries({ queryKey: ["group", id] });
+      queryClient.invalidateQueries({ queryKey: ["groupBalances", id] });
+      toast.success("Expense added");
+      setShowAddExpense(false);
+    },
   });
 
-  const deleteMutation = useMutation({
-      mutationFn: (id: string) => api.delete(`/income/${id}`),
-      onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['income'] });
-          queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-          toast.success('Income deleted');
+  const updateExpenseMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return api.put(`/shared-expenses/${editingExpense._id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["group", id] });
+      queryClient.invalidateQueries({ queryKey: ["groupBalances", id] });
+      toast.success("Expense updated");
+      setEditingExpense(null);
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: (expenseId: string) =>
+      api.delete(`/shared-expenses/${expenseId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["group", id] });
+      queryClient.invalidateQueries({ queryKey: ["groupBalances", id] });
+      toast.success("Expense deleted");
+      setExpenseToDelete(null);
+    },
+  });
+
+  const { data: pendingSettlements = [] } = useQuery({
+    queryKey: ["pendingSettlements", id],
+    queryFn: async () => {
+      const res = await api.get("/settlements/pending");
+      return res.data.filter((s: any) => s.group._id === id || s.group === id);
+    },
+  });
+
+  const confirmSettlementMutation = useMutation({
+    mutationFn: (settlementId: string) =>
+      api.put(`/settlements/${settlementId}/confirm`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groupBalances", id] });
+      queryClient.invalidateQueries({ queryKey: ["pendingSettlements", id] });
+      toast.success("Settlement confirmed!");
+    },
+  });
+
+  const settleMutation = useMutation({
+    mutationFn: (data: any) => api.post("/settlements", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pendingSettlements", id] });
+      toast.success("Settlement recorded");
+    },
+  });
+
+  // Group processing
+  if (groupLoading)
+    return (
+      <div className="p-8 text-center text-slate-500">Loading group...</div>
+    );
+  if (!groupData?.group)
+    return (
+      <div className="p-8 text-center text-slate-500">Group not found.</div>
+    );
+
+  const group = groupData.group;
+  const members = groupData.members || [];
+  const expenses = groupData.expenses || [];
+  const myBalance = balances[user.id] || 0;
+
+  const calculatePairwiseDebts = () => {
+      const effectiveBalances = { ...balances };
+      for (const st of pendingSettlements) {
+          const paidByStr = st.paidBy._id || st.paidBy;
+          const paidToStr = st.paidTo._id || st.paidTo;
+          effectiveBalances[paidByStr] = (effectiveBalances[paidByStr] || 0) + st.amount;
+          effectiveBalances[paidToStr] = (effectiveBalances[paidToStr] || 0) - st.amount;
       }
-  })
-  
+
+      const debtors: {user: string, amount: number}[] = [];
+      const creditors: {user: string, amount: number}[] = [];
+      
+      for (const [userId, bal] of Object.entries(effectiveBalances)) {
+          const b = bal as number;
+          if (b < -0.01) debtors.push({ user: userId, amount: -b });
+          else if (b > 0.01) creditors.push({ user: userId, amount: b });
+      }
+      
+      debtors.sort((a,b) => b.amount - a.amount);
+      creditors.sort((a,b) => b.amount - a.amount);
+      
+      const owes: { from: string, to: string, amount: number }[] = [];
+      let i = 0, j = 0;
+      while (i < debtors.length && j < creditors.length) {
+          const debtor = debtors[i];
+          const creditor = creditors[j];
+          const amount = Math.min(debtor.amount, creditor.amount);
+          
+          owes.push({ from: debtor.user, to: creditor.user, amount });
+          
+          debtor.amount -= amount;
+          creditor.amount -= amount;
+          
+          if (debtor.amount < 0.01) i++;
+          if (creditor.amount < 0.01) j++;
+      }
+      return owes;
+  };
+
+  const pairwiseOwes = calculatePairwiseDebts();
+  const myOwes = pairwiseOwes.filter(o => o.from === user.id || o.to === user.id);
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Income</h1>
-          <p className="text-slate-500 text-sm">Track your sources of income.</p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                {group.name}
+              </h1>
+              <span className="bg-slate-100 dark:bg-slate-900 text-slate-500 px-3 py-1 rounded-full text-xs font-mono tracking-widest">
+                CODE: {group.joinCode}
+              </span>
+            </div>
+            {group.description && (
+              <p className="text-slate-500">{group.description}</p>
+            )}
+            <p className="text-sm text-slate-400 mt-2">
+              {members.length} members
+            </p>
+          </div>
+
+          <div className="flex flex-col items-end">
+            <span className="text-sm text-slate-500 mb-1">
+              Your Total Balance
+            </span>
+            <span
+              className={`text-3xl font-bold ${myBalance > 0 ? "text-emerald-500" : myBalance < 0 ? "text-red-500" : "text-slate-900 dark:text-white"}`}
+            >
+              {myBalance > 0 ? "+" : ""}₹{myBalance.toFixed(2)}
+            </span>
+            <span className="text-xs text-slate-400 mt-1">
+              {myBalance > 0
+                ? "You Get"
+                : myBalance < 0
+                  ? "You Pay"
+                  : "Settled up"}
+            </span>
+          </div>
         </div>
-        <button 
-          onClick={() => setShowForm(!showForm)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          {showForm ? 'Cancel' : 'Add Income'}
-        </button>
       </div>
 
-      {showForm && (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <form onSubmit={handleSubmit((d) => addMutation.mutate({...d, amount: Number(d.amount), date: new Date()}))} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-             <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Amount (₹)</label>
-                <input type="number" step="0.01" {...register('amount', { required: true })} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-             </div>
-             <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">Source</label>
-                <select {...register('source', { required: true })} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <option value="Salary">Salary</option>
-                    <option value="Freelance">Freelance</option>
-                    <option value="Investments">Investments</option>
-                    <option value="Refund">Refund</option>
-                    <option value="Other">Other</option>
-                </select>
-             </div>
-             <div className="lg:col-span-2">
-                <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
-                <div className="flex gap-2">
-                    <input type="text" {...register('description', { required: true })} className="flex-1 px-3 py-2 border rounded-lg dark:bg-slate-900 border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                    <button type="submit" disabled={addMutation.isPending} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium whitespace-nowrap">
-                        Save
-                    </button>
+      {/* Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left: Expenses Timeline */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">Group Expenses</h2>
+            <button
+              onClick={() => {
+                if (showAddExpense || editingExpense) {
+                  setShowAddExpense(false);
+                  setEditingExpense(null);
+                } else {
+                  setShowAddExpense(true);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {showAddExpense || editingExpense ? (
+                "Cancel"
+              ) : (
+                <>
+                  <Plus size={16} /> Add Expense
+                </>
+              )}
+            </button>
+          </div>
+
+          {(showAddExpense || editingExpense) && (
+            <AddExpenseForm
+              key={editingExpense?._id || "new"}
+              members={members}
+              user={user}
+              onCancel={() => {
+                setShowAddExpense(false);
+                setEditingExpense(null);
+              }}
+              onSubmit={(d) => {
+                if (editingExpense) {
+                  updateExpenseMutation.mutate(d);
+                } else {
+                  addExpenseMutation.mutate(d);
+                }
+              }}
+              isLoading={
+                addExpenseMutation.isPending || updateExpenseMutation.isPending
+              }
+              initialData={editingExpense}
+            />
+          )}
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden divide-y divide-slate-100 dark:divide-slate-700">
+            {expenses.length === 0 ? (
+              <div className="p-8 text-center text-slate-500">
+                No expenses in this group yet.
+              </div>
+            ) : (
+              [...expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((exp: any) => (
+                <div
+                  key={exp._id}
+                  className="p-5 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-slate-100 dark:bg-slate-900 rounded-xl text-slate-500 text-center leading-none">
+                        <div className="text-xs uppercase">
+                          {format(new Date(exp.date), "MMM")}
+                        </div>
+                        <div className="text-lg font-bold text-slate-900 dark:text-white">
+                          {format(new Date(exp.date), "dd")}
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white">
+                          {exp.title}
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          Paid by{" "}
+                          <span className="font-medium text-slate-700 dark:text-slate-300">
+                            {exp.paidBy?.name === user.name
+                              ? "You"
+                              : exp.paidBy?.name}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">
+                          ₹{exp.amount.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {exp.splitType.replace("_", " ")} Split
+                        </p>
+                      </div>
+                      {exp.paidBy?._id === user.id && (
+                          <div className="flex items-center gap-3 mt-1">
+                            <button
+                              onClick={() => {
+                                setEditingExpense(exp);
+                                setShowAddExpense(false);
+                              }}
+                              className="text-slate-400 hover:text-emerald-500 transition-colors"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              onClick={() => setExpenseToDelete(exp._id)}
+                              className="text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Money Flow Visualization */}
+                  <div className="ml-16 mr-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+                    <p className="text-xs font-semibold text-slate-500 tracking-wider uppercase mb-3">
+                      Money Flow
+                    </p>
+                    <div className="space-y-2">
+                      {exp.splits
+                        ?.filter(
+                          (s: any) => s.user && s.user._id !== exp.paidBy?._id,
+                        )
+                        .map((split: any) => (
+                          <div
+                            key={split._id}
+                            className="flex items-center text-sm"
+                          >
+                            <span className="font-medium text-slate-700 dark:text-slate-300 w-24 truncate">
+                              {split.user._id === user.id
+                                ? "You"
+                                : split.user.name}
+                            </span>
+                            <span className="text-slate-400 mx-2 text-xs">
+                              to pay
+                            </span>
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400 w-16">
+                              ₹{split.amountOwed.toFixed(2)}
+                            </span>
+                            <ArrowRight
+                              size={14}
+                              className="text-slate-300 dark:text-slate-600 mx-2"
+                            />
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                              {exp.paidBy?._id === user.id
+                                ? "You"
+                                : exp.paidBy?.name}
+                            </span>
+                          </div>
+                        ))}
+                      {(exp.splits?.filter(
+                        (s: any) => s.user && s.user._id !== exp.paidBy?._id,
+                      ) || []).length === 0 && (
+                        <p className="text-sm text-slate-500 italic">
+                          Paid entirely for themselves.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-             </div>
-          </form>
+              ))
+            )}
+          </div>
         </div>
-      )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-         {isLoading ? (
-             <div className="p-8 text-center text-slate-500">Loading income...</div>
-         ) : incomes.length === 0 ? (
-             <div className="p-8 text-center text-slate-500">No income recorded yet.</div>
-         ) : (
-             <table className="w-full text-left text-sm">
-                 <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 text-xs uppercase">
-                     <tr>
-                         <th className="px-6 py-4 font-medium">Date</th>
-                         <th className="px-6 py-4 font-medium">Description</th>
-                         <th className="px-6 py-4 font-medium">Source</th>
-                         <th className="px-6 py-4 font-medium text-right">Amount</th>
-                         <th className="px-6 py-4"></th>
-                     </tr>
-                 </thead>
-                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                     {incomes.map((inc: any) => (
-                         <tr key={inc._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                             <td className="px-6 py-4 whitespace-nowrap text-slate-500">{format(new Date(inc.date), 'MMM d, yyyy')}</td>
-                             <td className="px-6 py-4 font-medium">{inc.description}</td>
-                             <td className="px-6 py-4">
-                                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
-                                     {inc.source}
-                                 </span>
-                             </td>
-                             <td className="px-6 py-4 text-right font-medium text-emerald-600 dark:text-emerald-400">
-                                 +₹{inc.amount.toFixed(2)}
-                             </td>
-                             <td className="px-6 py-4 text-right">
-                                 <button onClick={() => deleteMutation.mutate(inc._id)} className="text-slate-400 hover:text-red-500 transition-colors">
-                                     <Trash2 size={16} />
-                                 </button>
-                             </td>
-                         </tr>
-                     ))}
-                 </tbody>
-             </table>
-         )}
+        {/* Right: Balances & Settlement */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-bold">Your Balances</h2>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden divide-y divide-slate-100 dark:divide-slate-700">
+            {myOwes.length === 0 ? (
+                <div className="p-5 text-center text-slate-500">You are all settled up!</div>
+            ) : (
+                myOwes.map((owe, idx) => {
+                    const isOwe = owe.from === user.id;
+                    const otherUserId = isOwe ? owe.to : owe.from;
+                    const otherUser = members.find((m: any) => m.user && m.user._id === otherUserId)?.user;
+                    if (!otherUser) return null;
+                    return (
+                      <div
+                        key={idx}
+                        className="p-5 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-500">
+                            {otherUser.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900 dark:text-white">
+                              {otherUser.name}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {isOwe ? 'You Pay' : 'You Get'}
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className={`text-right font-bold ${isOwe ? "text-red-500" : "text-emerald-500"}`}
+                        >
+                          ₹{owe.amount.toFixed(2)}
+                        </div>
+                      </div>
+                    );
+                })
+            )}
+          </div>
+
+          {pendingSettlements.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-6 border border-amber-200 dark:border-amber-800 shadow-sm">
+                <h3 className="font-bold text-amber-900 dark:text-amber-100 mb-3 flex items-center gap-2">
+                  <Check size={18} /> Pending Settlements
+                </h3>
+                <div className="space-y-3">
+                  {pendingSettlements.map((settlement: any) => {
+                    const isReceiver = settlement.paidTo._id === user.id;
+                    const otherPerson = isReceiver ? settlement.paidBy : settlement.paidTo;
+                    return (
+                        <div key={settlement._id} className="flex flex-col gap-2 p-3 bg-white dark:bg-slate-800 rounded-xl border border-amber-100 dark:border-amber-900/50">
+                           <div className="flex justify-between items-center">
+                              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  {isReceiver ? `${otherPerson.name} paid you` : `You paid ${otherPerson.name}`}
+                              </span>
+                              <span className="font-bold text-amber-600 dark:text-amber-500">₹{settlement.amount.toFixed(2)}</span>
+                           </div>
+                           {isReceiver ? (
+                               <button 
+                                  onClick={() => confirmSettlementMutation.mutate(settlement._id)}
+                                  disabled={confirmSettlementMutation.isPending}
+                                  className="w-full mt-2 bg-amber-500 hover:bg-amber-600 text-white py-1.5 rounded-lg text-sm font-medium transition-colors"
+                               >
+                                  Confirm Received
+                               </button>
+                           ) : (
+                               <span className="text-xs text-slate-500 text-center block mt-1">Waiting for {otherPerson.name} to confirm</span>
+                           )}
+                        </div>
+                    );
+                  })}
+                </div>
+              </div>
+          )}
+
+          {/* Settlement Demo */}
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-6 text-white shadow-md">
+            <h3 className="font-bold mb-2 flex items-center gap-2">
+              <Check size={18} /> Settle Debts
+            </h3>
+            <p className="text-sm text-emerald-50 mb-4">
+              Click below to record a payment to settle an existing balance.
+            </p>
+
+            <div className="space-y-2">
+              {myOwes
+                .filter(o => o.from === user.id)
+                .map((owe: any, idx: number) => {
+                  const otherUser = members.find((m: any) => m.user && m.user._id === owe.to)?.user;
+                  if (!otherUser) return null;
+                  return (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setSettlementToCreate({
+                          paidTo: otherUser._id,
+                          amount: owe.amount,
+                          name: otherUser.name,
+                      });
+                    }}
+                    className="w-full bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-left flex justify-between"
+                  >
+                    <span>Pay {otherUser.name}</span>
+                    <span>₹{owe.amount.toFixed(2)}</span>
+                  </button>
+                )})}
+              {myOwes.filter(o => o.from === user.id).length === 0 && (
+                <p className="text-sm opacity-80 text-center italic">
+                  No debts to settle right now.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
+
+      <ConfirmModal
+        isOpen={!!expenseToDelete}
+        title="Delete Shared Expense"
+        message="Are you sure you want to delete this shared expense? This will also remove the calculated splits from everyone's balance."
+        onConfirm={() =>
+          expenseToDelete && deleteExpenseMutation.mutate(expenseToDelete)
+        }
+        onCancel={() => setExpenseToDelete(null)}
+        isLoading={deleteExpenseMutation.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!settlementToCreate}
+        title="Record Payment"
+        message={`Record payment to ${settlementToCreate?.name}? This will mark the settlement as pending until they confirm.`}
+        onConfirm={() => {
+          if (settlementToCreate) {
+            settleMutation.mutate({
+              group: id,
+              paidTo: settlementToCreate.paidTo,
+              amount: settlementToCreate.amount,
+            });
+            setSettlementToCreate(null);
+          }
+        }}
+        onCancel={() => setSettlementToCreate(null)}
+        isLoading={settleMutation.isPending}
+      />
     </div>
   );
 }
