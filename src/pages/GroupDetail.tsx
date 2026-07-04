@@ -118,7 +118,9 @@ export default function GroupDetail() {
       <div className="p-8 text-center text-slate-500">Group not found.</div>
     );
 
-  const { group, members, expenses } = groupData;
+  const group = groupData.group;
+  const members = groupData.members || [];
+  const expenses = groupData.expenses || [];
   const myBalance = balances[user.id] || 0;
 
   const calculatePairwiseDebts = () => {
@@ -196,9 +198,9 @@ export default function GroupDetail() {
             </span>
             <span className="text-xs text-slate-400 mt-1">
               {myBalance > 0
-                ? "You are owed"
+                ? "You Get"
                 : myBalance < 0
-                  ? "You owe"
+                  ? "You Pay"
                   : "Settled up"}
             </span>
           </div>
@@ -261,7 +263,7 @@ export default function GroupDetail() {
                 No expenses in this group yet.
               </div>
             ) : (
-              expenses.map((exp: any) => (
+              [...expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((exp: any) => (
                 <div
                   key={exp._id}
                   className="p-5 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors"
@@ -342,7 +344,7 @@ export default function GroupDetail() {
                                 : split.user.name}
                             </span>
                             <span className="text-slate-400 mx-2 text-xs">
-                              owes
+                              to pay
                             </span>
                             <span className="font-medium text-emerald-600 dark:text-emerald-400 w-16">
                               ₹{split.amountOwed.toFixed(2)}
@@ -358,9 +360,9 @@ export default function GroupDetail() {
                             </span>
                           </div>
                         ))}
-                      {exp.splits?.filter(
+                      {(exp.splits?.filter(
                         (s: any) => s.user && s.user._id !== exp.paidBy?._id,
-                      ).length === 0 && (
+                      ) || []).length === 0 && (
                         <p className="text-sm text-slate-500 italic">
                           Paid entirely for themselves.
                         </p>
@@ -400,7 +402,7 @@ export default function GroupDetail() {
                               {otherUser.name}
                             </p>
                             <p className="text-xs text-slate-500">
-                              {isOwe ? 'You owe' : 'Owes you'}
+                              {isOwe ? 'You Pay' : 'You Get'}
                             </p>
                           </div>
                         </div>
