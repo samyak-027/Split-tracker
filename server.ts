@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import { createServer as createViteServer } from 'vite';
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config()
 
 // Routes will be imported here
 import authRoutes from './src/back/routes/authRoutes';
