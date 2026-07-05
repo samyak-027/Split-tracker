@@ -141,7 +141,7 @@ export default function Expenses() {
          ) : expenses.length === 0 ? (
              <div className="p-8 text-center text-slate-500">No expenses recorded yet.</div>
          ) : (
-             <table className="w-full text-left text-sm">
+             <table className="w-full min-w-[800px] text-left text-sm">
                  <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 text-xs uppercase">
                      <tr>
                          <th className="px-6 py-4 font-medium">Date</th>
