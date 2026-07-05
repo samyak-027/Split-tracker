@@ -30,7 +30,7 @@ export default function History() {
         <p className="text-slate-500 text-sm">Your recent actions and updates.</p>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-x-auto">
         {isLoading ? (
              <div className="p-8 text-center text-slate-500">Loading history...</div>
         ) : activities.length === 0 ? (
