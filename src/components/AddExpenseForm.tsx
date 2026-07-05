@@ -65,23 +65,17 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
   const exactAmounts = watch('exactAmounts');
   const percentages = watch('percentages');
 
-  const selectedParticipantIds = useMemo(() => {
-    return Object.keys(participants).filter(k => participants[k]);
-  }, [participants]);
+  const selectedParticipantIds = Object.keys(participants || {}).filter(k => participants[k]);
 
-  const activeParticipantIds = useMemo(() => {
-     if (selectedType === 'EQUAL' || selectedType === 'PERCENTAGE') {
-         if (excludePayer) {
-             return selectedParticipantIds.filter(id => id !== paidBy);
-         }
-     }
-     if (selectedType === 'SINGLE_PERSON') {
-         const ids = Object.keys(participants).filter(k => participants[k]);
-         if (ids.length > 0) return [ids[0]]; // restrict to 1 logically
-         return [];
-     }
-     return selectedParticipantIds;
-  }, [selectedParticipantIds, excludePayer, paidBy, selectedType]);
+  let activeParticipantIds = selectedParticipantIds;
+  if (selectedType === 'EQUAL' || selectedType === 'PERCENTAGE') {
+      if (excludePayer) {
+          activeParticipantIds = selectedParticipantIds.filter(id => id !== paidBy);
+      }
+  } else if (selectedType === 'SINGLE_PERSON') {
+      const ids = Object.keys(participants || {}).filter(k => participants[k]);
+      activeParticipantIds = ids.length > 0 ? [ids[0]] : [];
+  }
 
 
   const calculateSplits = (data: any) => {
@@ -245,20 +239,20 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                                 <label className="flex items-center gap-3 cursor-pointer flex-1">
                                     <input 
                                         type={selectedType === 'SINGLE_PERSON' ? 'radio' : 'checkbox'} 
-                                        name="participants"
                                         disabled={isExcludedLogically}
-                                        value={m.user._id}
-                                        {...register(`participants.${m.user._id}` as any)}
-                                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                                        onChange={(e) => {
-                                            if (selectedType === 'SINGLE_PERSON') {
-                                                // Clear others
-                                                Object.keys(participants).forEach(k => setValue(`participants.${k}`, false));
-                                                setValue(`participants.${m.user._id}`, true);
-                                            } else {
-                                                setValue(`participants.${m.user._id}`, e.target.checked);
+                                        {...register(`participants.${m.user._id}` as any, {
+                                            onChange: (e) => {
+                                                if (selectedType === 'SINGLE_PERSON') {
+                                                    // Clear others
+                                                    Object.keys(participants).forEach(k => {
+                                                        if (k !== m.user._id) {
+                                                            setValue(`participants.${k}`, false);
+                                                        }
+                                                    });
+                                                }
                                             }
-                                        }}
+                                        })}
+                                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4"
                                     />
                                     <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-500 text-xs">
                                         {m.user.name.charAt(0)}
