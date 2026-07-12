@@ -35,13 +35,16 @@ export default function GroupDetail() {
     },
   });
 
-  const { data: balances = {}, isLoading: balanceLoading } = useQuery({
+  const { data: balancesData = { netBalances: {}, pairwise: [] }, isLoading: balanceLoading } = useQuery({
     queryKey: ["groupBalances", id],
     queryFn: async () => {
       const res = await api.get(`/groups/${id}/balances`);
       return res.data;
     },
   });
+
+  const balances = balancesData.netBalances || {};
+  const serverPairwise = balancesData.pairwise || [];
 
   const addExpenseMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -124,40 +127,39 @@ export default function GroupDetail() {
   const myBalance = balances[user.id] || 0;
 
   const calculatePairwiseDebts = () => {
-      const effectiveBalances = { ...balances };
+      const owesMap: Record<string, Record<string, number>> = {};
+      
+      for (const p of serverPairwise) {
+          if (!owesMap[p.from]) owesMap[p.from] = {};
+          owesMap[p.from][p.to] = p.amount;
+      }
+
       for (const st of pendingSettlements) {
           const paidByStr = st.paidBy._id || st.paidBy;
           const paidToStr = st.paidTo._id || st.paidTo;
-          effectiveBalances[paidByStr] = (effectiveBalances[paidByStr] || 0) + st.amount;
-          effectiveBalances[paidToStr] = (effectiveBalances[paidToStr] || 0) - st.amount;
+          if (!owesMap[paidByStr]) owesMap[paidByStr] = {};
+          owesMap[paidByStr][paidToStr] = (owesMap[paidByStr][paidToStr] || 0) - st.amount;
       }
 
-      const debtors: {user: string, amount: number}[] = [];
-      const creditors: {user: string, amount: number}[] = [];
-      
-      for (const [userId, bal] of Object.entries(effectiveBalances)) {
-          const b = bal as number;
-          if (b < -0.01) debtors.push({ user: userId, amount: -b });
-          else if (b > 0.01) creditors.push({ user: userId, amount: b });
-      }
-      
-      debtors.sort((a,b) => b.amount - a.amount);
-      creditors.sort((a,b) => b.amount - a.amount);
-      
       const owes: { from: string, to: string, amount: number }[] = [];
-      let i = 0, j = 0;
-      while (i < debtors.length && j < creditors.length) {
-          const debtor = debtors[i];
-          const creditor = creditors[j];
-          const amount = Math.min(debtor.amount, creditor.amount);
-          
-          owes.push({ from: debtor.user, to: creditor.user, amount });
-          
-          debtor.amount -= amount;
-          creditor.amount -= amount;
-          
-          if (debtor.amount < 0.01) i++;
-          if (creditor.amount < 0.01) j++;
+      const processed = new Set<string>();
+
+      for (const fromUser in owesMap) {
+          for (const toUser in owesMap[fromUser]) {
+              const key = fromUser < toUser ? `${fromUser}-${toUser}` : `${toUser}-${fromUser}`;
+              if (processed.has(key)) continue;
+              processed.add(key);
+
+              const amountA = owesMap[fromUser]?.[toUser] || 0;
+              const amountB = owesMap[toUser]?.[fromUser] || 0;
+
+              const net = amountA - amountB;
+              if (net > 0.01) {
+                  owes.push({ from: fromUser, to: toUser, amount: Math.round(net * 100) / 100 });
+              } else if (net < -0.01) {
+                  owes.push({ from: toUser, to: fromUser, amount: Math.round(-net * 100) / 100 });
+              }
+          }
       }
       return owes;
   };
