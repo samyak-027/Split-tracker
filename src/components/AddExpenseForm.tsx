@@ -56,14 +56,15 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
       }
   });
 
-  const selectedType = watch('splitType');
-  const amountStr = watch('amount');
+  const allValues = watch();
+  const selectedType = allValues.splitType;
+  const amountStr = allValues.amount;
   const amount = Number(amountStr) || 0;
-  const excludePayer = watch('excludePayer');
-  const paidBy = watch('paidBy');
-  const participants = watch('participants');
-  const exactAmounts = watch('exactAmounts');
-  const percentages = watch('percentages');
+  const excludePayer = allValues.excludePayer;
+  const paidBy = allValues.paidBy;
+  const participants = allValues.participants || {};
+  const exactAmounts = allValues.exactAmounts || {};
+  const percentages = allValues.percentages || {};
 
   const selectedParticipantIds = Object.keys(participants || {}).filter(k => participants[k]);
 
