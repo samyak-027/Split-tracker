@@ -104,23 +104,29 @@ router.get("/:id/balances", authenticate, async (req: AuthRequest, res) => {
   try {
     const groupId = req.params.id;
 
-    // Simple balances: positive means they are owed money, negative means they owe money
-    const balances: Record<string, number> = {};
+    const netBalances: Record<string, number> = {};
+    const owesMap: Record<string, Record<string, number>> = {};
 
     const sharedExpenses = await SharedExpense.find({ group: groupId });
-    for (const exp of sharedExpenses) {
-      const paidByStr = exp.paidBy.toString();
-      balances[paidByStr] = (balances[paidByStr] || 0) + exp.amount;
-    }
-
     const expenseIds = sharedExpenses.map((e) => e._id);
     const shares = await ExpenseShare.find({ expense: { $in: expenseIds } });
-    for (const share of shares) {
-      const userStr = share.user.toString();
-      balances[userStr] = (balances[userStr] || 0) - share.amountOwed;
+
+    for (const exp of sharedExpenses) {
+      const paidByStr = exp.paidBy.toString();
+      netBalances[paidByStr] = (netBalances[paidByStr] || 0) + exp.amount;
+
+      const expShares = shares.filter((s) => s.expense.toString() === exp._id.toString());
+      for (const share of expShares) {
+        const userStr = share.user.toString();
+        netBalances[userStr] = (netBalances[userStr] || 0) - share.amountOwed;
+
+        if (userStr !== paidByStr) {
+          if (!owesMap[userStr]) owesMap[userStr] = {};
+          owesMap[userStr][paidByStr] = (owesMap[userStr][paidByStr] || 0) + share.amountOwed;
+        }
+      }
     }
 
-    // Also take settlements into account
     const settlements = await Settlement.find({
       group: groupId,
       status: "COMPLETED",
@@ -128,16 +134,39 @@ router.get("/:id/balances", authenticate, async (req: AuthRequest, res) => {
     for (const st of settlements) {
       const paidByStr = st.paidBy.toString();
       const paidToStr = st.paidTo.toString();
-      balances[paidByStr] = (balances[paidByStr] || 0) + st.amount;
-      balances[paidToStr] = (balances[paidToStr] || 0) - st.amount;
+      netBalances[paidByStr] = (netBalances[paidByStr] || 0) + st.amount;
+      netBalances[paidToStr] = (netBalances[paidToStr] || 0) - st.amount;
+
+      if (!owesMap[paidByStr]) owesMap[paidByStr] = {};
+      owesMap[paidByStr][paidToStr] = (owesMap[paidByStr][paidToStr] || 0) - st.amount;
     }
 
-    // Round to 2 decimals to avoid floating point errors
-    for (const key in balances) {
-      balances[key] = Math.round(balances[key] * 100) / 100;
+    for (const key in netBalances) {
+      netBalances[key] = Math.round(netBalances[key] * 100) / 100;
     }
 
-    res.json(balances);
+    const pairwise: { from: string; to: string; amount: number }[] = [];
+    const processed = new Set<string>();
+
+    for (const fromUser in owesMap) {
+      for (const toUser in owesMap[fromUser]) {
+        const key = fromUser < toUser ? `${fromUser}-${toUser}` : `${toUser}-${fromUser}`;
+        if (processed.has(key)) continue;
+        processed.add(key);
+
+        const amountA = owesMap[fromUser]?.[toUser] || 0;
+        const amountB = owesMap[toUser]?.[fromUser] || 0;
+
+        const net = amountA - amountB;
+        if (net > 0.01) {
+          pairwise.push({ from: fromUser, to: toUser, amount: Math.round(net * 100) / 100 });
+        } else if (net < -0.01) {
+          pairwise.push({ from: toUser, to: fromUser, amount: Math.round(-net * 100) / 100 });
+        }
+      }
+    }
+
+    res.json({ netBalances, pairwise });
   } catch (err) {
     res.status(500).json({ error: (err as any).message });
   }
