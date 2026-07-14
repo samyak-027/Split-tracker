@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Trash2, Pencil } from 'lucide-react';
+import { Trash2, Pencil, Download, FileText } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Expenses() {
   const queryClient = useQueryClient();
@@ -76,6 +78,48 @@ export default function Expenses() {
       }
   }
 
+  const exportCSV = () => {
+      if (!expenses || expenses.length === 0) return;
+      const headers = ['Date', 'Description', 'Category', 'Amount'];
+      const rows = expenses.map((e: any) => [
+          format(new Date(e.date), 'dd/MM/yyyy'),
+          `"${e.description}"`,
+          e.category,
+          e.amount.toFixed(2)
+      ]);
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', 'personal_expenses.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  }
+
+  const exportPDF = () => {
+      if (!expenses || expenses.length === 0) return;
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.text("Personal Expenses", 14, 20);
+      
+      const tableData = expenses.map((e: any) => [
+          format(new Date(e.date), 'dd/MM/yyyy'),
+          e.description,
+          e.category,
+          e.amount.toFixed(2)
+      ]);
+      
+      autoTable(doc, {
+          head: [['Date', 'Description', 'Category', 'Amount (₹)']],
+          body: tableData,
+          startY: 30,
+          foot: [['', '', 'Total:', expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2)]],
+          footStyles: { fontStyle: 'bold', fillColor: [240, 240, 240] }
+      });
+      doc.save('personal_expenses.pdf');
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -83,19 +127,33 @@ export default function Expenses() {
           <h1 className="text-2xl font-bold tracking-tight">Personal Expenses</h1>
           <p className="text-slate-500 text-sm">Track your personal spendings.</p>
         </div>
-        <button 
-          onClick={() => {
-              if (showForm) {
-                  setShowForm(false);
-                  setEditingExpense(null);
-              } else {
-                  setShowForm(true);
-              }
-          }}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          {showForm ? 'Cancel' : 'Add Expense'}
-        </button>
+        <div className="flex gap-2">
+            <button
+              onClick={exportCSV}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <FileText size={16} /> CSV
+            </button>
+            <button
+              onClick={exportPDF}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <Download size={16} /> PDF
+            </button>
+            <button 
+              onClick={() => {
+                  if (showForm) {
+                      setShowForm(false);
+                      setEditingExpense(null);
+                  } else {
+                      setShowForm(true);
+                  }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {showForm ? 'Cancel' : 'Add Expense'}
+            </button>
+        </div>
       </div>
 
       {showForm && (

@@ -5,17 +5,19 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { useAuthStore } from "../store/authStore";
-import { useForm } from "react-hook-form";
 import AddExpenseForm from "../components/AddExpenseForm";
 import {
-  HandCoins,
   Plus,
   Check,
   ArrowRight,
   Trash2,
   Pencil,
+  Download,
+  FileText
 } from "lucide-react";
 import ConfirmModal from "../components/ConfirmModal";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function GroupDetail() {
   const { id } = useParams();
@@ -25,7 +27,6 @@ export default function GroupDetail() {
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
   const [settlementToCreate, setSettlementToCreate] = useState<{ amount: number; paidTo: string; name: string } | null>(null);
   const [editingExpense, setEditingExpense] = useState<any>(null);
-  const { register, handleSubmit, reset } = useForm();
 
   const { data: groupData, isLoading: groupLoading } = useQuery({
     queryKey: ["group", id],
@@ -35,7 +36,7 @@ export default function GroupDetail() {
     },
   });
 
-  const { data: balancesData = { netBalances: {}, pairwise: [] }, isLoading: balanceLoading } = useQuery({
+  const { data: balancesData = { netBalances: {}, pairwise: [] } } = useQuery({
     queryKey: ["groupBalances", id],
     queryFn: async () => {
       const res = await api.get(`/groups/${id}/balances`);
@@ -167,6 +168,84 @@ export default function GroupDetail() {
   const pairwiseOwes = calculatePairwiseDebts();
   const myOwes = pairwiseOwes.filter(o => o.from === user.id || o.to === user.id);
 
+  const exportCSV = () => {
+    if (!expenses || expenses.length === 0) return;
+    const headers = ['Date', 'Title', 'Description', 'Amount', 'Paid By'];
+    const rows = expenses.map((e: any) => [
+        format(new Date(e.date || e.createdAt || new Date()), 'dd/MM/yyyy'),
+        `"${e.title || 'Untitled'}"`,
+        `"${e.description || ''}"`,
+        e.amount.toFixed(2),
+        `"${e.paidBy?.name || 'Unknown'}"`
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `group_${group.name.replace(/\s+/g, '_')}_expenses.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  const exportPDF = () => {
+    if (!expenses || expenses.length === 0) return;
+    const doc = new jsPDF();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text(`Group Expenses: ${group.name}`, 14, 20);
+    
+    // Add group description if available
+    if (group.description) {
+      doc.setFontSize(10);
+      doc.text(`Description: ${group.description}`, 14, 30);
+    }
+    
+    // Expenses table
+    const tableData = expenses.map((e: any) => [
+        format(new Date(e.date || e.createdAt || new Date()), 'dd/MM/yyyy'),
+        e.title || 'Untitled',
+        e.description || '',
+        e.amount.toFixed(2),
+        e.paidBy?.name || 'Unknown'
+    ]);
+    
+    autoTable(doc, {
+        head: [['Date', 'Title', 'Description', 'Amount (₹)', 'Paid By']],
+        body: tableData,
+        startY: group.description ? 40 : 30,
+        foot: [['', '', 'Total:', expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2), '']],
+        footStyles: { fontStyle: 'bold', fillColor: [240, 240, 240] }
+    });
+    
+    // Get the final Y position after the table
+    const finalY = (doc as any).lastAutoTable.finalY || 100;
+    
+    // Calculate individual spending breakdown
+    const spendingByPerson: Record<string, number> = {};
+    expenses.forEach((e: any) => {
+      const payerName = e.paidBy?.name || 'Unknown';
+      spendingByPerson[payerName] = (spendingByPerson[payerName] || 0) + e.amount;
+    });
+    
+    // Add individual spending section
+    doc.setFontSize(14);
+    doc.text('Individual Spending Breakdown:', 14, finalY + 20);
+    
+    let yPosition = finalY + 30;
+    doc.setFontSize(10);
+    
+    Object.entries(spendingByPerson)
+      .sort(([, a], [, b]) => b - a) // Sort by amount descending
+      .forEach(([person, amount]) => {
+        doc.text(`${person}: ₹${amount.toFixed(2)}`, 20, yPosition);
+        yPosition += 8;
+      });
+    
+    doc.save(`group_${group.name.replace(/\s+/g, '_')}_expenses.pdf`);
+  }
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -187,8 +266,21 @@ export default function GroupDetail() {
             <p className="text-sm text-slate-400 mt-2">
               {members.length} members
             </p>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={exportCSV}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <FileText size={16} /> Export CSV
+              </button>
+              <button
+                onClick={exportPDF}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <Download size={16} /> Export PDF
+              </button>
+            </div>
           </div>
-
           <div className="flex flex-col items-end">
             <span className="text-sm text-slate-500 mb-1">
               Your Total Balance

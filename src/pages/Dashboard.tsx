@@ -30,7 +30,7 @@ export default function Dashboard() {
     );
   }
 
-  const { expenseTotal = 0, incomeTotal = 0, balance = 0, recentActivity = [] } = data || {};
+  const { expenseTotal = 0, incomeTotal = 0, balance = 0, recentActivity = [], youGet = 0, groups = [] } = data || {};
 
   return (
     <div className="space-y-8">
@@ -60,33 +60,62 @@ export default function Dashboard() {
         />
         <StatCard 
           title="You Get" 
-          amount={0} 
+          amount={youGet} 
           icon={<HandCoins className="text-purple-500" />} 
           type="net" 
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Quick Actions */}
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
-          <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Link to="/expenses" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
-              <TrendingDown className="mb-2" />
-              <span className="text-sm font-medium">Add Expense</span>
-            </Link>
-            <Link to="/income" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
-              <TrendingUp className="mb-2" />
-              <span className="text-sm font-medium">Add Income</span>
-            </Link>
-            <Link to="/groups" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
-              <Users className="mb-2" />
-              <span className="text-sm font-medium">Create Group</span>
-            </Link>
-            <Link to="/groups" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
-              <FolderKanban className="mb-2" />
-              <span className="text-sm font-medium">Shared Expense</span>
-            </Link>
+        <div className="space-y-8">
+          {/* Your Groups */}
+          {groups.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <h2 className="text-lg font-semibold mb-4">Your Groups</h2>
+              <div className="space-y-3">
+                {groups.map((group: any) => (
+                  <Link 
+                    key={group._id} 
+                    to={`/groups/${group._id}`}
+                    className="flex items-center justify-between p-4 rounded-xl border border-slate-100 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center font-bold">
+                        {group.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900 dark:text-white">{group.name}</p>
+                        <p className="text-xs text-slate-500">Code: {group.joinCode}</p>
+                      </div>
+                    </div>
+                    <ArrowUpRight size={18} className="text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-2 gap-3">
+              <Link to="/expenses" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
+                <TrendingDown className="mb-2" />
+                <span className="text-sm font-medium">Add Expense</span>
+              </Link>
+              <Link to="/income" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
+                <TrendingUp className="mb-2" />
+                <span className="text-sm font-medium">Add Income</span>
+              </Link>
+              <Link to="/groups" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
+                <Users className="mb-2" />
+                <span className="text-sm font-medium">Create Group</span>
+              </Link>
+              <Link to="/groups" className="flex flex-col items-center justify-center p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors border border-slate-100 dark:border-slate-800">
+                <FolderKanban className="mb-2" />
+                <span className="text-sm font-medium">Shared Expense</span>
+              </Link>
+            </div>
           </div>
         </div>
 
