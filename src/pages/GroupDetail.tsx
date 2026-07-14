@@ -175,7 +175,7 @@ export default function GroupDetail() {
         format(new Date(e.date || e.createdAt || new Date()), 'dd/MM/yyyy'),
         `"${e.title || 'Untitled'}"`,
         `"${e.description || ''}"`,
-        e.amount.toFixed(2),
+        Number(e.amount).toFixed(2), // Ensure it's a number
         `"${e.paidBy?.name || 'Unknown'}"`
     ]);
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
@@ -207,16 +207,20 @@ export default function GroupDetail() {
         format(new Date(e.date || e.createdAt || new Date()), 'dd/MM/yyyy'),
         e.title || 'Untitled',
         e.description || '',
-        e.amount.toFixed(2),
+        `Rs.${Number(e.amount).toFixed(2)}`, // Using Rs. instead of ₹ for PDF compatibility
         e.paidBy?.name || 'Unknown'
     ]);
     
     autoTable(doc, {
-        head: [['Date', 'Title', 'Description', 'Amount (₹)', 'Paid By']],
+        head: [['Date', 'Title', 'Description', 'Amount (Rs.)', 'Paid By']],
         body: tableData,
         startY: group.description ? 40 : 30,
-        foot: [['', '', 'Total:', expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2), '']],
-        footStyles: { fontStyle: 'bold', fillColor: [240, 240, 240] }
+        foot: [['', '', 'Total:', `Rs.${expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2)}`, '']],
+        footStyles: { 
+            fontStyle: 'bold', 
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0] // Black text
+        }
     });
     
     // Get the final Y position after the table
@@ -239,7 +243,7 @@ export default function GroupDetail() {
     Object.entries(spendingByPerson)
       .sort(([, a], [, b]) => b - a) // Sort by amount descending
       .forEach(([person, amount]) => {
-        doc.text(`${person}: ₹${amount.toFixed(2)}`, 20, yPosition);
+        doc.text(`${person}: Rs.${amount.toFixed(2)}`, 20, yPosition);
         yPosition += 8;
       });
     

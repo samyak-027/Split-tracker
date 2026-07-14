@@ -85,7 +85,7 @@ export default function Expenses() {
           format(new Date(e.date), 'dd/MM/yyyy'),
           `"${e.description}"`,
           e.category,
-          e.amount.toFixed(2)
+          Number(e.amount).toFixed(2) // Ensure it's a number
       ]);
       const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n');
       const encodedUri = encodeURI(csvContent);
@@ -107,15 +107,19 @@ export default function Expenses() {
           format(new Date(e.date), 'dd/MM/yyyy'),
           e.description,
           e.category,
-          e.amount.toFixed(2)
+          `Rs.${Number(e.amount).toFixed(2)}` // Using Rs. instead of ₹ for PDF compatibility
       ]);
       
       autoTable(doc, {
-          head: [['Date', 'Description', 'Category', 'Amount (₹)']],
+          head: [['Date', 'Description', 'Category', 'Amount (Rs.)']],
           body: tableData,
           startY: 30,
-          foot: [['', '', 'Total:', expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2)]],
-          footStyles: { fontStyle: 'bold', fillColor: [240, 240, 240] }
+          foot: [['', '', 'Total:', `Rs.${expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(2)}`]],
+          footStyles: { 
+              fontStyle: 'bold', 
+              fillColor: [240, 240, 240],
+              textColor: [0, 0, 0] // Black text
+          }
       });
       doc.save('personal_expenses.pdf');
   }
