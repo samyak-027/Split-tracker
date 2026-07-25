@@ -1,0 +1,6 @@
+{
+  "name": "SplitTrack",
+  "description": "Full-stack MERN application for tracking personal expenses and group expense sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
