@@ -155,12 +155,12 @@ export default function Expenses() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Personal Expenses</h1>
           <p className="text-base-content/60 text-sm">Track your personal spendings.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <button
               onClick={() => exportCSV()}
               className="bg-base-200 hover:bg-base-300 text-base-content px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"

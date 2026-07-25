@@ -181,9 +181,9 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                 <h3 className="text-sm font-bold text-base-content/60 uppercase tracking-wider mb-4 border-b border-base-300  pb-2">Step 2: Split Method</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {['EQUAL', 'EXACT', 'PERCENTAGE', 'SINGLE_PERSON'].map(type => (
-                        <label key={type} className={`cursor-pointer border rounded-lg p-3 text-center transition-colors ${selectedType === type ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-base-300 hover:bg-base-200'}`}>
+                        <label key={type} className={`cursor-pointer border rounded-lg p-2 sm:p-3 text-center transition-colors flex items-center justify-center ${selectedType === type ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-base-300 hover:bg-base-200'}`}>
                             <input type="radio" value={type} {...register('splitType')} className="sr-only" />
-                            <span className="text-sm">{type.replace('_', ' ')}</span>
+                            <span className="text-xs sm:text-sm whitespace-nowrap">{type.replace('_', ' ')}</span>
                         </label>
                     ))}
                 </div>
@@ -191,10 +191,10 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
 
             {/* Step 3 */}
             <div>
-                <div className="flex justify-between items-center border-b border-base-300  pb-2 mb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-base-300 pb-2 mb-4 gap-2">
                     <h3 className="text-sm font-bold text-base-content/60 uppercase tracking-wider">Step 3: Participants</h3>
                     {(selectedType === 'EQUAL' || selectedType === 'PERCENTAGE') && (
-                        <label className="flex items-center gap-2 text-sm text-base-content/70 ">
+                        <label className="flex items-center gap-2 text-sm text-base-content/70">
                             <input type="checkbox" {...register('excludePayer')} className="rounded border-base-300 text-primary focus:ring-primary" />
                             Exclude Payer
                         </label>
@@ -212,13 +212,13 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                                 valComponent = (
                                      <div className="flex items-center gap-2">
                                         <span className="text-base-content/60 font-medium tracking-wide">₹</span>
-                                        <input type="number" step="0.01" {...register(`exactAmounts.${m.user._id}` as any)} className="w-24 px-2 py-1 text-right border rounded bg-base-100  border-base-300  focus:outline-none" placeholder="0.00" />
+                                        <input type="number" step="0.01" {...register(`exactAmounts.${m.user._id}` as any)} className="w-24 px-2 py-1 text-right border rounded bg-base-200 border-base-300 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="0.00" />
                                      </div>
                                 );
                             } else if (selectedType === 'PERCENTAGE') {
                                 valComponent = (
                                     <div className="flex items-center gap-2">
-                                        <input type="number" step="1" {...register(`percentages.${m.user._id}` as any)} className="w-20 px-2 py-1 text-right border rounded bg-base-100  border-base-300  focus:outline-none" placeholder="0" />
+                                        <input type="number" step="1" {...register(`percentages.${m.user._id}` as any)} className="w-20 px-2 py-1 text-right border rounded bg-base-200 border-base-300 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="0" />
                                         <span className="text-base-content/60 font-medium tracking-wide">%</span>
                                      </div>
                                 );
@@ -253,7 +253,7 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                                                 }
                                             }
                                         })}
-                                        className="rounded border-base-300 text-primary focus:ring-primary w-4 h-4"
+                                        className={`${selectedType === 'SINGLE_PERSON' ? 'rounded-full' : 'rounded'} border-base-300 text-primary focus:ring-primary w-4 h-4`}
                                     />
                                     <div className="w-8 h-8 rounded-full bg-base-200  flex items-center justify-center font-bold text-base-content/60 text-xs">
                                         {m.user.name.charAt(0)}

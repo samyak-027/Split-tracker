@@ -146,7 +146,7 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ title, amount, icon }: { title: string, amount: number, icon: React.ReactNode }) {
+function StatCard({ title, amount, icon, type }: { title: string, amount: number, icon: React.ReactNode, type?: string }) {
   return (
     <div className="bg-base-100 p-6 rounded-2xl shadow-sm border border-base-300 flex items-center space-x-4">
       <div className="p-3 rounded-full bg-base-200">
