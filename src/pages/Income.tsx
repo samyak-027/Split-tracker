@@ -1,14 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { Trash2 } from 'lucide-react';
+import StatementMonthSelect, { isInMonth } from '../components/StatementMonthSelect';
 
 export default function Income() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [statementMonth, setStatementMonth] = useState(format(new Date(), 'yyyy-MM'));
   const { register, handleSubmit, reset } = useForm();
 
   const { data: incomes = [], isLoading } = useQuery({
@@ -19,6 +21,13 @@ export default function Income() {
     }
   });
 
+  const statementIncomes = useMemo(
+    () => [...incomes]
+      .filter((income: any) => isInMonth(income.date, statementMonth))
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [incomes, statementMonth],
+  );
+
   const addMutation = useMutation({
     mutationFn: (data: any) => api.post('/income', data),
     onSuccess: () => {
@@ -26,6 +35,7 @@ export default function Income() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Income added');
       setShowForm(false);
+      setStatementMonth(format(new Date(), 'yyyy-MM'));
       reset();
     }
   });
@@ -52,6 +62,10 @@ export default function Income() {
         >
           {showForm ? 'Cancel' : 'Add Income'}
         </button>
+      </div>
+
+      <div className="flex justify-end rounded-2xl border border-base-300 bg-base-100 p-4">
+        <StatementMonthSelect value={statementMonth} onChange={setStatementMonth} dates={incomes.map((income: any) => income.date)} />
       </div>
 
       {showForm && (
@@ -87,8 +101,8 @@ export default function Income() {
       <div className="bg-base-100  rounded-2xl shadow-sm border border-base-300  overflow-x-auto">
          {isLoading ? (
              <div className="p-8 text-center text-base-content/60">Loading income...</div>
-         ) : incomes.length === 0 ? (
-             <div className="p-8 text-center text-base-content/60">No income recorded yet.</div>
+         ) : statementIncomes.length === 0 ? (
+             <div className="p-8 text-center text-base-content/60">No income recorded for this statement month.</div>
          ) : (
              <table className="w-full min-w-[800px] text-left text-sm">
                  <thead className="bg-base-200  text-base-content/60 text-xs uppercase">
@@ -101,7 +115,7 @@ export default function Income() {
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-base-300 ">
-                     {[...incomes].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((inc: any) => (
+                     {statementIncomes.map((inc: any) => (
                          <tr key={inc._id} className="hover:bg-base-200/50 ">
                              <td className="px-6 py-4 whitespace-nowrap text-base-content/60">{format(new Date(inc.date), 'MMM d, yyyy')}</td>
                              <td className="px-6 py-4 font-medium">{inc.description}</td>
