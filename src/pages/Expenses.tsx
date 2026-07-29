@@ -1,12 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
-import { Trash2, Pencil, Download, FileText } from 'lucide-react';
+import { Trash2, Pencil, Download, FileText, Search } from 'lucide-react';
 import ConfirmModal from '../components/ConfirmModal';
 import DateRangeExport from '../components/DateRangeExport';
+import Pagination from '../components/Pagination';
+import StatementMonthSelect, { isInMonth } from '../components/StatementMonthSelect';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -15,6 +17,9 @@ export default function Expenses() {
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statementMonth, setStatementMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [page, setPage] = useState(1);
   
   const { register, handleSubmit, reset, setValue } = useForm();
 
@@ -37,6 +42,26 @@ export default function Expenses() {
     }
   });
 
+  const statementExpenses = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return [...expenses]
+      .filter((expense: any) => isInMonth(expense.date, statementMonth))
+      .filter((expense: any) => !normalizedSearch || [expense.description, expense.title, expense.category]
+        .some((value) => String(value || '').toLowerCase().includes(normalizedSearch)))
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses, searchTerm, statementMonth]);
+
+  const totalPages = Math.max(1, Math.ceil(statementExpenses.length / 10));
+  const paginatedExpenses = statementExpenses.slice((page - 1) * 10, page * 10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statementMonth]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const addMutation = useMutation({
     mutationFn: (data: any) => api.post('/expenses', data),
     onSuccess: () => {
@@ -44,6 +69,7 @@ export default function Expenses() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast.success('Expense added');
       setShowForm(false);
+      setStatementMonth(format(new Date(), 'yyyy-MM'));
       reset();
     }
   });
@@ -194,6 +220,20 @@ export default function Expenses() {
         </div>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:max-w-sm">
+          <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50" />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search title or category"
+            className="w-full rounded-lg border border-base-300 bg-base-100 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+        <StatementMonthSelect value={statementMonth} onChange={setStatementMonth} dates={expenses.map((expense: any) => expense.date)} />
+      </div>
+
       {showForm && (
         <div className="bg-base-100 p-6 rounded-2xl shadow-sm border border-base-300">
           <div className="mb-4">
@@ -234,9 +274,10 @@ export default function Expenses() {
       <div className="bg-base-100 rounded-2xl shadow-sm border border-base-300 overflow-x-auto">
          {isLoading ? (
              <div className="p-8 text-center text-base-content/60">Loading expenses...</div>
-         ) : expenses.length === 0 ? (
+         ) : statementExpenses.length === 0 ? (
              <div className="p-8 text-center text-base-content/60">No expenses recorded yet.</div>
          ) : (
+             <>
              <table className="w-full min-w-[800px] text-left text-sm">
                  <thead className="bg-base-200 text-base-content/60 text-xs uppercase">
                      <tr>
@@ -248,7 +289,7 @@ export default function Expenses() {
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-base-300">
-                     {[...expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((exp: any) => (
+                     {paginatedExpenses.map((exp: any) => (
                          <tr key={exp._id} className="hover:bg-base-200/50">
                              <td className="px-6 py-4 whitespace-nowrap text-base-content/60">{format(new Date(exp.date), 'MMM d, yyyy')}</td>
                              <td className="px-6 py-4 font-medium">{exp.description}</td>
@@ -274,6 +315,8 @@ export default function Expenses() {
                      ))}
                  </tbody>
              </table>
+             <Pagination currentPage={page} totalItems={statementExpenses.length} onPageChange={setPage} />
+             </>
          )}
       </div>
 

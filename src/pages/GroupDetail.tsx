@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { useAuthStore } from "../store/authStore";
@@ -16,9 +16,12 @@ import {
   Download,
   FileText,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Search
 } from "lucide-react";
 import ConfirmModal from "../components/ConfirmModal";
+import Pagination from "../components/Pagination";
+import StatementMonthSelect, { isInMonth } from "../components/StatementMonthSelect";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -31,6 +34,9 @@ export default function GroupDetail() {
   const [settlementToCreate, setSettlementToCreate] = useState<{ amount: number; paidTo: string; name: string } | null>(null);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [mobileBalancesOpen, setMobileBalancesOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statementMonth, setStatementMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [page, setPage] = useState(1);
 
   const { data: groupData, isLoading: groupLoading } = useQuery({
     queryKey: ["group", id],
@@ -64,6 +70,7 @@ export default function GroupDetail() {
       queryClient.invalidateQueries({ queryKey: ["groupBalances", id] });
       toast.success("Expense added");
       setShowAddExpense(false);
+      setStatementMonth(format(new Date(), "yyyy-MM"));
     },
   });
 
@@ -109,6 +116,27 @@ export default function GroupDetail() {
     },
   });
 
+  const expenses = groupData?.expenses || [];
+  const statementExpenses = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return [...expenses]
+      .filter((expense: any) => isInMonth(expense.date || expense.createdAt, statementMonth))
+      .filter((expense: any) => !normalizedSearch || [expense.title, expense.category]
+        .some((value) => String(value || "").toLowerCase().includes(normalizedSearch)))
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses, searchTerm, statementMonth]);
+
+  const totalPages = Math.max(1, Math.ceil(statementExpenses.length / 10));
+  const paginatedExpenses = statementExpenses.slice((page - 1) * 10, page * 10);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, statementMonth]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const confirmSettlementMutation = useMutation({
     mutationFn: (settlementId: string) =>
       api.put(`/settlements/${settlementId}/confirm`),
@@ -139,7 +167,6 @@ export default function GroupDetail() {
 
   const group = groupData.group;
   const members = groupData.members || [];
-  const expenses = groupData.expenses || [];
   const myBalance = balances[user.id] || 0;
 
   const calculatePairwiseDebts = () => {
@@ -441,7 +468,7 @@ export default function GroupDetail() {
                       <button
                         key={idx}
                         onClick={() => setSettlementToCreate({ paidTo: otherUser._id, amount: owe.amount, name: otherUser.name })}
-                        className="w-full bg-base-100/20 hover:bg-base-100/30 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left flex justify-between"
+                        className="w-full bg-base-100/20 hover:bg-base-100/30 px-3 py-2 rounded-lg text-sm font-medium text-primary-content transition-colors text-left flex justify-between"
                       >
                         <span>Pay {otherUser.name}</span>
                         <span>₹{owe.amount.toFixed(2)}</span>
@@ -514,8 +541,8 @@ export default function GroupDetail() {
           )}
           
           {pendingSettlements.length > 0 && (
-              <div className="bg-warning/20 rounded-xl p-4 border border-warning/30 text-warning-content">
-                <h4 className="font-medium text-warning-content  mb-2">Pending Confirmations</h4>
+              <div className="bg-warning/10 rounded-xl p-4 border border-warning/30">
+                <h4 className="font-medium text-base-content mb-2">Pending Confirmations</h4>
                 <div className="space-y-2">
                   {pendingSettlements.slice(0, 2).map((settlement: any) => {
                     const isReceiver = settlement.paidTo._id === user.id;
@@ -532,7 +559,7 @@ export default function GroupDetail() {
                           <button 
                             onClick={() => confirmSettlementMutation.mutate(settlement._id)}
                             disabled={confirmSettlementMutation.isPending}
-                            className="w-full bg-warning hover:bg-warning/80 text-primary-content py-1.5 rounded-lg text-xs font-medium transition-colors"
+                            className="w-full bg-warning hover:bg-warning/80 text-warning-content py-1.5 rounded-lg text-xs font-medium transition-colors"
                           >
                             Confirm Received
                           </button>
@@ -574,6 +601,24 @@ export default function GroupDetail() {
             </button>
           </div>
 
+          <div className="flex flex-col gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-sm">
+              <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search title or category"
+                className="w-full rounded-lg border border-base-300 bg-base-100 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <StatementMonthSelect
+              value={statementMonth}
+              onChange={setStatementMonth}
+              dates={expenses.map((expense: any) => expense.date || expense.createdAt)}
+            />
+          </div>
+
           {(showAddExpense || editingExpense) && (
             <AddExpenseForm
               key={editingExpense?._id || "new"}
@@ -598,12 +643,13 @@ export default function GroupDetail() {
           )}
 
           <div className="bg-base-100 rounded-2xl shadow-sm border border-base-300 overflow-hidden divide-y divide-base-300">
-            {expenses.length === 0 ? (
+            {statementExpenses.length === 0 ? (
               <div className="p-8 text-center text-base-content/60">
-                No expenses in this group yet.
+                No expenses in this statement month.
               </div>
             ) : (
-              [...expenses].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((exp: any) => (
+              <>
+              {paginatedExpenses.map((exp: any) => (
                 <div
                   key={exp._id}
                   className="p-5 hover:bg-base-200/50 transition-colors"
@@ -664,7 +710,7 @@ export default function GroupDetail() {
                   </div>
 
                   {/* Money Flow Visualization */}
-                  <div className="ml-16 mr-4 bg-base-200 p-4 rounded-xl border border-base-300">
+                  <div className="ml-0 sm:ml-16 sm:mr-4 bg-base-200 p-4 rounded-xl border border-base-300">
                     <p className="text-xs font-semibold text-base-content/60 tracking-wider uppercase mb-3">
                       Money Flow
                     </p>
@@ -710,7 +756,9 @@ export default function GroupDetail() {
                     </div>
                   </div>
                 </div>
-              ))
+              ))}
+              <Pagination currentPage={page} totalItems={statementExpenses.length} onPageChange={setPage} />
+              </>
             )}
           </div>
         </div>
@@ -758,8 +806,8 @@ export default function GroupDetail() {
           </div>
 
           {pendingSettlements.length > 0 && (
-              <div className="bg-warning/20  rounded-2xl p-6 border border-warning/30  shadow-sm">
-                <h3 className="font-bold text-warning-content  mb-3 flex items-center gap-2">
+              <div className="bg-warning/10 rounded-2xl p-6 border border-warning/30 shadow-sm">
+                <h3 className="font-bold text-base-content mb-3 flex items-center gap-2">
                   <Check size={18} /> Pending Settlements
                 </h3>
                 <div className="space-y-3">
@@ -778,7 +826,7 @@ export default function GroupDetail() {
                                <button 
                                   onClick={() => confirmSettlementMutation.mutate(settlement._id)}
                                   disabled={confirmSettlementMutation.isPending}
-                                  className="w-full mt-2 bg-warning hover:bg-warning/80 text-primary-content py-1.5 rounded-lg text-sm font-medium transition-colors"
+                                  className="w-full mt-2 bg-warning hover:bg-warning/80 text-warning-content py-1.5 rounded-lg text-sm font-medium transition-colors"
                                >
                                   Confirm Received
                                </button>
@@ -797,7 +845,7 @@ export default function GroupDetail() {
             <h3 className="font-bold mb-2 flex items-center gap-2">
               <Check size={18} /> Settle Debts
             </h3>
-            <p className="text-sm text-success-content mb-4">
+            <p className="text-sm text-primary-content/80 mb-4">
               Click below to record a payment to settle an existing balance.
             </p>
 
@@ -817,7 +865,7 @@ export default function GroupDetail() {
                           name: otherUser.name,
                       });
                     }}
-                    className="w-full bg-base-100/20 hover:bg-base-100/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors text-left flex justify-between"
+                    className="w-full bg-base-100/20 hover:bg-base-100/30 px-4 py-2 rounded-lg text-sm font-medium text-primary-content transition-colors text-left flex justify-between"
                   >
                     <span>Pay {otherUser.name}</span>
                     <span>₹{owe.amount.toFixed(2)}</span>
