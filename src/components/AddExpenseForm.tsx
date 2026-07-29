@@ -131,8 +131,9 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
   };
 
   return (
-    <div className="bg-base-100  p-6 rounded-2xl shadow-sm border border-base-300 ">
-        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+    <div className="min-w-0 bg-base-100 p-4 sm:p-6 rounded-2xl shadow-sm border border-base-300">
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="min-w-0 space-y-6">
+            <input type="hidden" {...register('splitType')} />
             
             {/* Step 1 */}
             <div>
@@ -179,12 +180,18 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
             {/* Step 2 */}
             <div>
                 <h3 className="text-sm font-bold text-base-content/60 uppercase tracking-wider mb-4 border-b border-base-300  pb-2">Step 2: Split Method</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3" role="radiogroup" aria-label="Split method">
                     {['EQUAL', 'EXACT', 'PERCENTAGE', 'SINGLE_PERSON'].map(type => (
-                        <label key={type} className={`cursor-pointer border rounded-lg p-2 sm:p-3 text-center transition-colors flex items-center justify-center ${selectedType === type ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-base-300 hover:bg-base-200'}`}>
-                            <input type="radio" value={type} {...register('splitType')} className="sr-only" />
-                            <span className="text-xs sm:text-sm whitespace-nowrap">{type.replace('_', ' ')}</span>
-                        </label>
+                        <button
+                            key={type}
+                            type="button"
+                            role="radio"
+                            aria-checked={selectedType === type}
+                            onClick={() => setValue('splitType', type, { shouldDirty: true, shouldValidate: true })}
+                            className={`min-w-0 cursor-pointer border rounded-lg p-2 sm:p-3 text-center transition-colors flex items-center justify-center ${selectedType === type ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-base-300 hover:bg-base-200'}`}
+                        >
+                            <span className="truncate text-xs sm:text-sm">{type.replace('_', ' ')}</span>
+                        </button>
                     ))}
                 </div>
             </div>
@@ -236,8 +243,8 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                         }
 
                         return (
-                            <div key={m.user._id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isExcludedLogically ? 'bg-base-200  border-dashed border-base-300  opacity-60' : 'bg-base-100  border-base-300 '}`}>
-                                <label className="flex items-center gap-3 cursor-pointer flex-1">
+                            <div key={m.user._id} className={`flex min-w-0 items-center justify-between gap-3 p-3 rounded-lg border transition-colors ${isExcludedLogically ? 'bg-base-200  border-dashed border-base-300  opacity-60' : 'bg-base-100  border-base-300 '}`}>
+                                <label className="flex min-w-0 items-center gap-3 cursor-pointer flex-1">
                                     <input 
                                         type={selectedType === 'SINGLE_PERSON' ? 'radio' : 'checkbox'} 
                                         disabled={isExcludedLogically}
@@ -258,13 +265,13 @@ export default function AddExpenseForm({ members, user, onCancel, onSubmit, isLo
                                     <div className="w-8 h-8 rounded-full bg-base-200  flex items-center justify-center font-bold text-base-content/60 text-xs">
                                         {m.user.name.charAt(0)}
                                     </div>
-                                    <span className="font-medium text-base-content/80 ">
+                                    <span className="truncate font-medium text-base-content/80">
                                         {m.user._id === user.id ? 'You' : m.user.name}
                                         {isExcludedLogically && <span className="ml-2 text-xs font-normal italic text-base-content/50">(Excluded payer)</span>}
                                     </span>
                                 </label>
                                 
-                                {valComponent}
+                                <div className="shrink-0">{valComponent}</div>
                             </div>
                         )
                     })}
