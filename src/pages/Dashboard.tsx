@@ -36,7 +36,7 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-base-content/60">Welcome back. Here is an overview of your finances.</p>
+        <p className="text-base-content/60">Welcome back. Here is your {format(new Date(), 'MMMM yyyy')} statement overview.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

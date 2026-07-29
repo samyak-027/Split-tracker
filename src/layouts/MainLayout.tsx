@@ -30,7 +30,7 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-base-200 text-base-content">
+    <div className="flex min-h-dvh bg-base-200 text-base-content lg:h-screen lg:overflow-hidden">
       {/* Mobile sidebar toggle */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-md bg-base-100 shadow-md">
@@ -85,7 +85,7 @@ export default function MainLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto w-full flex flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-x-hidden lg:min-h-0 lg:overflow-y-auto">
         <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 pt-20 lg:pt-8 flex-1 w-full">
           <Outlet />
         </div>
