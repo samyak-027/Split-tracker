@@ -17,7 +17,8 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  Search
+  Search,
+  Users
 } from "lucide-react";
 import ConfirmModal from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
@@ -37,6 +38,8 @@ export default function GroupDetail() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statementMonth, setStatementMonth] = useState(format(new Date(), "yyyy-MM"));
   const [page, setPage] = useState(1);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [memberFilterOpen, setMemberFilterOpen] = useState(false);
 
   const { data: groupData, isLoading: groupLoading } = useQuery({
     queryKey: ["group", id],
@@ -117,21 +120,28 @@ export default function GroupDetail() {
   });
 
   const expenses = groupData?.expenses || [];
+  const members = groupData?.members || [];
+  const statementMonthExpenses = useMemo(
+    () => expenses.filter((expense: any) => isInMonth(expense.date || expense.createdAt, statementMonth)),
+    [expenses, statementMonth],
+  );
+  const statementTotal = statementMonthExpenses.reduce((sum: number, expense: any) => sum + expense.amount, 0);
+
   const statementExpenses = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    return [...expenses]
-      .filter((expense: any) => isInMonth(expense.date || expense.createdAt, statementMonth))
+    return [...statementMonthExpenses]
       .filter((expense: any) => !normalizedSearch || [expense.title, expense.category]
         .some((value) => String(value || "").toLowerCase().includes(normalizedSearch)))
+      .filter((expense: any) => !selectedMemberIds.length || selectedMemberIds.includes(expense.paidBy?._id || expense.paidBy))
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, searchTerm, statementMonth]);
+  }, [statementMonthExpenses, searchTerm, selectedMemberIds]);
 
   const totalPages = Math.max(1, Math.ceil(statementExpenses.length / 10));
   const paginatedExpenses = statementExpenses.slice((page - 1) * 10, page * 10);
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, statementMonth]);
+  }, [searchTerm, statementMonth, selectedMemberIds]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -166,8 +176,8 @@ export default function GroupDetail() {
     );
 
   const group = groupData.group;
-  const members = groupData.members || [];
   const myBalance = balances[user.id] || 0;
+  const groupMemberUsers = members.map((member: any) => member.user).filter(Boolean);
 
   const calculatePairwiseDebts = () => {
       const owesMap: Record<string, Record<string, number>> = {};
@@ -416,9 +426,9 @@ export default function GroupDetail() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-base-content">
-                    {expenses.reduce((sum: number, e: any) => sum + e.amount, 0).toFixed(0)}
+                    ₹{statementTotal.toFixed(2)}
                   </div>
-                  <div className="text-xs text-base-content/40">Total Spent</div>
+                  <div className="text-xs text-base-content/40">{format(new Date(`${statementMonth}-01T00:00:00`), "MMM yyyy")} Spent</div>
                 </div>
               </div>
             </div>
@@ -513,63 +523,6 @@ export default function GroupDetail() {
               </div>
           )}
 
-          {myOwes.filter(o => o.from === user.id).length > 0 && (
-              <div className="space-y-3">
-                  <h3 className="text-lg font-bold text-base-content">Quick Settle</h3>
-                  <div className="bg-success/10 border border-success/20 rounded-2xl shadow-sm overflow-hidden divide-y divide-success/20">
-                      {myOwes.filter(o => o.from === user.id).map((owe: any, idx: number) => {
-                          const otherUser = members.find((m: any) => m.user && m.user._id === owe.to)?.user;
-                          if (!otherUser) return null;
-                          return (
-                              <button
-                                  key={idx}
-                                  onClick={() => setSettlementToCreate({ paidTo: otherUser._id, amount: owe.amount, name: otherUser.name })}
-                                  className="w-full p-3 text-left hover:bg-success/5 transition-colors flex items-center justify-between"
-                              >
-                                  <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 rounded-full bg-base-200 flex items-center justify-center font-bold text-base-content/60 text-xs">
-                                          {otherUser.name.charAt(0)}
-                                      </div>
-                                      <span className="font-medium text-base-content">Settle with {otherUser.name}</span>
-                                  </div>
-                                  <span className="font-bold text-success">₹{owe.amount.toFixed(2)}</span>
-                              </button>
-                          );
-                      })}
-                  </div>
-              </div>
-          )}
-          
-          {pendingSettlements.length > 0 && (
-              <div className="bg-warning/10 rounded-xl p-4 border border-warning/30">
-                <h4 className="font-medium text-base-content mb-2">Pending Confirmations</h4>
-                <div className="space-y-2">
-                  {pendingSettlements.slice(0, 2).map((settlement: any) => {
-                    const isReceiver = settlement.paidTo._id === user.id;
-                    const otherPerson = isReceiver ? settlement.paidBy : settlement.paidTo;
-                    return (
-                      <div key={settlement._id} className="bg-base-100  rounded-lg p-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-medium text-base-content ">
-                            {isReceiver ? `${otherPerson.name} paid you` : `You paid ${otherPerson.name}`}
-                          </span>
-                          <span className="text-xs font-bold text-warning ">₹{settlement.amount.toFixed(2)}</span>
-                        </div>
-                        {isReceiver && (
-                          <button 
-                            onClick={() => confirmSettlementMutation.mutate(settlement._id)}
-                            disabled={confirmSettlementMutation.isPending}
-                            className="w-full bg-warning hover:bg-warning/80 text-warning-content py-1.5 rounded-lg text-xs font-medium transition-colors"
-                          >
-                            Confirm Received
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -601,16 +554,58 @@ export default function GroupDetail() {
             </button>
           </div>
 
-          <div className="flex flex-col gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-sm">
-              <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50" />
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search title or category"
-                className="w-full rounded-lg border border-base-300 bg-base-100 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+          <div className="flex flex-col gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex w-full flex-col gap-3 sm:flex-row xl:max-w-xl">
+              <div className="relative w-full sm:max-w-sm">
+                <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50" />
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search title or category"
+                  className="w-full rounded-lg border border-base-300 bg-base-100 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMemberFilterOpen((isOpen) => !isOpen)}
+                  aria-expanded={memberFilterOpen}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-100 px-3 py-2 text-sm font-medium text-base-content hover:bg-base-200 sm:w-48"
+                >
+                  <span className="flex items-center gap-2 truncate"><Users size={16} /> {selectedMemberIds.length ? `${selectedMemberIds.length} people selected` : "Filter by payer"}</span>
+                  <ChevronDown size={16} className={`shrink-0 transition-transform ${memberFilterOpen ? "rotate-180" : ""}`} />
+                </button>
+                {memberFilterOpen && (
+                  <div className="absolute left-0 z-20 mt-2 w-full min-w-60 rounded-xl border border-base-300 bg-base-100 p-3 shadow-xl sm:w-72">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-base-content/60">Paid by</p>
+                      {selectedMemberIds.length > 0 && (
+                        <button type="button" onClick={() => setSelectedMemberIds([])} className="text-xs font-medium text-primary hover:text-primary-focus">Clear</button>
+                      )}
+                    </div>
+                    <div className="max-h-52 space-y-1 overflow-y-auto">
+                      {groupMemberUsers.map((member: any) => {
+                        const memberId = member._id;
+                        return (
+                          <label key={memberId} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-base-200">
+                            <input
+                              type="checkbox"
+                              checked={selectedMemberIds.includes(memberId)}
+                              onChange={() => setSelectedMemberIds((current) => current.includes(memberId)
+                                ? current.filter((id) => id !== memberId)
+                                : [...current, memberId])}
+                              className="h-4 w-4 rounded border-base-300 text-primary focus:ring-primary"
+                            />
+                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-base-200 text-xs font-bold text-base-content/60">{member.name.charAt(0)}</span>
+                            <span className="truncate text-base-content">{member._id === user.id ? "You" : member.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <StatementMonthSelect
               value={statementMonth}
